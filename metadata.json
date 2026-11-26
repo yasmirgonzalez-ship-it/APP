@@ -1,0 +1,8 @@
+{
+  "name": "DUP RefriControl",
+  "description": "Control de inventario y ventas de Coca-Cola Normal y Coca-Cola Zero en la refrigeradora de la oficina.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

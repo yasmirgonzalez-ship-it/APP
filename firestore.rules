@@ -1,0 +1,279 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Global Primitives & Helpers
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'supervision.ambiental2@hemco.com.ni' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function selfServiceEnabled() {
+      return !exists(/databases/$(database)/documents/settings/fridge) ||
+        get(/databases/$(database)/documents/settings/fridge).data.allowSelfService == true;
+    }
+
+    // =========================================================================
+    // Validation Blueprints
+    // =========================================================================
+    function isValidProduct(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'variant', 'stock', 'minStock',
+          'unitPrice', 'unitCost', 'active', 'lastSaleId', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'variant', 'volumeMl', 'stock', 'minStock',
+          'unitPrice', 'unitCost', 'active', 'lastSaleId', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && data.variant in ['normal', 'zero', 'otro']
+        && (!data.keys().hasAny(['volumeMl']) || (data.volumeMl is int && data.volumeMl >= 50 && data.volumeMl <= 5000))
+        && data.stock is int && data.stock >= 0 && data.stock <= 5000
+        && data.minStock is int && data.minStock >= 0 && data.minStock <= 500
+        && (data.unitPrice is int || data.unitPrice is float) && data.unitPrice > 0 && data.unitPrice <= 100000
+        && (data.unitCost is int || data.unitCost is float) && data.unitCost >= 0 && data.unitCost <= 100000
+        && data.active is bool
+        && data.lastSaleId is string && data.lastSaleId.size() <= 128
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSale(data) {
+      return data.keys().hasAll([
+          'productId', 'productName', 'variant', 'quantity', 'unitPrice',
+          'totalAmount', 'paymentMethod', 'paid', 'buyerUid', 'buyerName',
+          'recordedByUid', 'note', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'productId', 'productName', 'variant', 'volumeMl', 'quantity', 'unitPrice',
+          'totalAmount', 'paymentMethod', 'paid', 'buyerUid', 'buyerName',
+          'recordedByUid', 'note', 'createdAt', 'settledAt'
+        ])
+        && isValidId(data.productId)
+        && data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 80
+        && data.variant in ['normal', 'zero', 'otro']
+        && (!data.keys().hasAny(['volumeMl']) || (data.volumeMl is int && data.volumeMl >= 50 && data.volumeMl <= 5000))
+        && data.quantity is int && data.quantity >= 1 && data.quantity <= 24
+        && (data.unitPrice is int || data.unitPrice is float) && data.unitPrice > 0 && data.unitPrice <= 100000
+        && (data.totalAmount is int || data.totalAmount is float) && data.totalAmount > 0 && data.totalAmount <= 2400000
+        && data.paymentMethod in ['efectivo', 'transferencia', 'credito']
+        && data.paid is bool
+        && isValidId(data.buyerUid)
+        && data.buyerName is string && data.buyerName.size() >= 1 && data.buyerName.size() <= 80
+        && isValidId(data.recordedByUid)
+        && data.note is string && data.note.size() <= 160
+        && data.createdAt is timestamp
+        && (!data.keys().hasAny(['settledAt']) || data.settledAt is timestamp);
+    }
+
+    function isValidRestock(data) {
+      return data.keys().hasAll([
+          'productId', 'productName', 'variant', 'quantityAdded',
+          'unitCost', 'totalCost', 'supplier', 'note',
+          'recordedByUid', 'recordedByName', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'productId', 'productName', 'variant', 'volumeMl', 'quantityAdded',
+          'unitCost', 'totalCost', 'supplier', 'note',
+          'recordedByUid', 'recordedByName', 'createdAt'
+        ])
+        && isValidId(data.productId)
+        && data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 80
+        && data.variant in ['normal', 'zero', 'otro']
+        && (!data.keys().hasAny(['volumeMl']) || (data.volumeMl is int && data.volumeMl >= 50 && data.volumeMl <= 5000))
+        && data.quantityAdded is int && data.quantityAdded >= 1 && data.quantityAdded <= 500
+        && (data.unitCost is int || data.unitCost is float) && data.unitCost >= 0 && data.unitCost <= 100000
+        && (data.totalCost is int || data.totalCost is float) && data.totalCost >= 0 && data.totalCost <= 50000000
+        && data.supplier is string && data.supplier.size() <= 80
+        && data.note is string && data.note.size() <= 160
+        && isValidId(data.recordedByUid)
+        && data.recordedByName is string && data.recordedByName.size() >= 1 && data.recordedByName.size() <= 80
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll(['officeName', 'currencySymbol', 'allowSelfService', 'updatedAt'])
+        && data.keys().hasOnly(['officeName', 'currencySymbol', 'allowSelfService', 'adminName', 'updatedAt'])
+        && data.officeName is string && data.officeName.size() >= 1 && data.officeName.size() <= 80
+        && data.currencySymbol is string && data.currencySymbol.size() >= 1 && data.currencySymbol.size() <= 8
+        && data.allowSelfService is bool
+        && (!data.keys().hasAny(['adminName']) || (data.adminName is string && data.adminName.size() >= 1 && data.adminName.size() <= 80))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'createdAt'])
+        && isValidId(data.uid)
+        && data.createdAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection: /products/{productId}
+    // =========================================================================
+    match /products/{productId} {
+      allow get: if isVerifiedUser() && isValidId(productId);
+      allow list: if isAdmin() || (isVerifiedUser() && resource.data.active == true);
+
+      allow create: if isAdmin()
+        && isValidId(productId)
+        && isValidProduct(incoming())
+        && incoming().id == productId
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(productId)
+        && isValidProduct(incoming())
+        && incoming().id == existing().id
+        && incoming().updatedAt == request.time
+        && (
+          // Tier 1: Admin full update (name, variant, volumeMl, prices, minStock, stock, active)
+          (
+            isAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'variant', 'volumeMl', 'stock', 'minStock', 'unitPrice', 'unitCost', 'active', 'lastSaleId', 'updatedAt'
+            ])
+          )
+          ||
+          // Tier 2: Atomic Self-Service Sale Decrement (buyers cannot alter price, cost, minStock, volume, or increase stock)
+          (
+            selfServiceEnabled()
+            && incoming().variant == existing().variant
+            && incoming().diff(existing()).affectedKeys().hasOnly(['stock', 'lastSaleId', 'updatedAt'])
+            && incoming().stock < existing().stock
+            && existing().stock - incoming().stock <= 24
+            && isValidId(incoming().lastSaleId)
+            && existsAfter(/databases/$(database)/documents/sales/$(incoming().lastSaleId))
+            && getAfter(/databases/$(database)/documents/sales/$(incoming().lastSaleId)).data.productId == productId
+            && getAfter(/databases/$(database)/documents/sales/$(incoming().lastSaleId)).data.quantity == existing().stock - incoming().stock
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // Collection: /sales/{saleId}
+    // =========================================================================
+    match /sales/{saleId} {
+      allow get: if isVerifiedUser()
+        && isValidId(saleId)
+        && (existing().buyerUid == request.auth.uid || isAdmin());
+
+      allow list: if isVerifiedUser()
+        && (resource.data.buyerUid == request.auth.uid || isAdmin());
+
+      allow create: if isVerifiedUser()
+        && isValidId(saleId)
+        && isValidSale(incoming())
+        && incoming().recordedByUid == request.auth.uid
+        && (isAdmin() || (incoming().buyerUid == request.auth.uid && selfServiceEnabled()))
+        && incoming().paid == (incoming().paymentMethod != 'credito')
+        && incoming().createdAt == request.time
+        && !incoming().keys().hasAny(['settledAt'])
+        && exists(/databases/$(database)/documents/products/$(incoming().productId))
+        && get(/databases/$(database)/documents/products/$(incoming().productId)).data.active == true
+        && incoming().variant == get(/databases/$(database)/documents/products/$(incoming().productId)).data.variant
+        && incoming().productName == get(/databases/$(database)/documents/products/$(incoming().productId)).data.name
+        && (!incoming().keys().hasAny(['volumeMl']) || !get(/databases/$(database)/documents/products/$(incoming().productId)).data.keys().hasAny(['volumeMl']) || incoming().volumeMl == get(/databases/$(database)/documents/products/$(incoming().productId)).data.volumeMl)
+        && incoming().unitPrice == get(/databases/$(database)/documents/products/$(incoming().productId)).data.unitPrice
+        && incoming().totalAmount >= (incoming().quantity * incoming().unitPrice) - 0.01
+        && incoming().totalAmount <= (incoming().quantity * incoming().unitPrice) + 0.01
+        && getAfter(/databases/$(database)/documents/products/$(incoming().productId)).data.lastSaleId == saleId
+        && getAfter(/databases/$(database)/documents/products/$(incoming().productId)).data.stock == get(/databases/$(database)/documents/products/$(incoming().productId)).data.stock - incoming().quantity;
+
+      // Only the Administrator / Seller can settle unpaid credits or adjust sale payment status
+      allow update: if isAdmin()
+        && isValidId(saleId)
+        && isValidSale(incoming())
+        && incoming().productId == existing().productId
+        && incoming().productName == existing().productName
+        && incoming().variant == existing().variant
+        && incoming().quantity == existing().quantity
+        && incoming().unitPrice == existing().unitPrice
+        && incoming().totalAmount == existing().totalAmount
+        && incoming().buyerUid == existing().buyerUid
+        && incoming().recordedByUid == existing().recordedByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['paid', 'paymentMethod', 'buyerName', 'note', 'settledAt'])
+        && (!incoming().keys().hasAny(['settledAt']) || incoming().settledAt == request.time);
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // Collection: /restocks/{restockId}
+    // =========================================================================
+    match /restocks/{restockId} {
+      allow get: if isAdmin() && isValidId(restockId);
+      allow list: if isAdmin();
+
+      allow create: if isAdmin()
+        && isValidId(restockId)
+        && isValidRestock(incoming())
+        && incoming().recordedByUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/products/$(incoming().productId))
+        && getAfter(/databases/$(database)/documents/products/$(incoming().productId)).data.stock == get(/databases/$(database)/documents/products/$(incoming().productId)).data.stock + incoming().quantityAdded;
+
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // Collection: /settings/{settingId}
+    // =========================================================================
+    match /settings/{settingId} {
+      allow get: if isVerifiedUser() && settingId == 'fridge';
+      allow list: if false;
+
+      allow create, update: if isAdmin()
+        && settingId == 'fridge'
+        && isValidSettings(incoming())
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // Collection: /admins/{adminUid}
+    // =========================================================================
+    match /admins/{adminUid} {
+      allow get: if isAdmin() && isValidId(adminUid);
+      allow list: if false;
+      allow create: if isAdmin()
+        && isValidId(adminUid)
+        && isValidAdminRecord(incoming())
+        && incoming().uid == adminUid
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}

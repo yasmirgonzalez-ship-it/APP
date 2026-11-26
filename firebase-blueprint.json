@@ -1,0 +1,322 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Beverage item tracked inside the office refrigerator with specific volume (e.g. 355 ml, 200 ml).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Canonical document identifier."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Display name of the beverage."
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["normal", "zero", "otro"],
+          "description": "Beverage variant identifier."
+        },
+        "volumeMl": {
+          "type": "integer",
+          "description": "Container volume in milliliters (e.g. 355, 200)."
+        },
+        "stock": {
+          "type": "integer",
+          "description": "Current physical units available inside the refrigerator."
+        },
+        "minStock": {
+          "type": "integer",
+          "description": "Low-stock alert threshold in units."
+        },
+        "unitPrice": {
+          "type": "number",
+          "description": "Selling price per unit."
+        },
+        "unitCost": {
+          "type": "number",
+          "description": "Purchase cost per unit."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether the product is active in the catalog."
+        },
+        "lastSaleId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "ID of the last sale transaction that decremented stock."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "variant",
+        "stock",
+        "minStock",
+        "unitPrice",
+        "unitCost",
+        "active",
+        "lastSaleId",
+        "updatedAt"
+      ]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Immutable/settleable record of a beverage sale from the office refrigerator.",
+      "type": "object",
+      "properties": {
+        "productId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Referenced Product ID."
+        },
+        "productName": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Snapshot name of the product sold."
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["normal", "zero", "otro"],
+          "description": "Product variant snapshot."
+        },
+        "volumeMl": {
+          "type": "integer",
+          "description": "Volume in milliliters at time of sale."
+        },
+        "quantity": {
+          "type": "integer",
+          "description": "Number of units sold (1 to 24)."
+        },
+        "unitPrice": {
+          "type": "number",
+          "description": "Unit price at time of sale."
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Computed total price (quantity * unitPrice)."
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["efectivo", "transferencia", "credito"],
+          "description": "Payment method used."
+        },
+        "paid": {
+          "type": "boolean",
+          "description": "Whether payment has been settled."
+        },
+        "buyerUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the buyer or recording user."
+        },
+        "buyerName": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Display name of the buyer (no PII)."
+        },
+        "recordedByUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the authenticated user who created the record."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 160,
+          "description": "Optional note for the transaction."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "settledAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when pending credit was settled."
+        }
+      },
+      "required": [
+        "productId",
+        "productName",
+        "variant",
+        "quantity",
+        "unitPrice",
+        "totalAmount",
+        "paymentMethod",
+        "paid",
+        "buyerUid",
+        "buyerName",
+        "recordedByUid",
+        "note",
+        "createdAt"
+      ]
+    },
+    "Restock": {
+      "title": "Restock",
+      "description": "Inventory replenishment entry recording units added to the refrigerator.",
+      "type": "object",
+      "properties": {
+        "productId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Referenced Product ID."
+        },
+        "productName": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Snapshot name of the product restocked."
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["normal", "zero", "otro"],
+          "description": "Product variant snapshot."
+        },
+        "volumeMl": {
+          "type": "integer",
+          "description": "Volume in milliliters of restocked product."
+        },
+        "quantityAdded": {
+          "type": "integer",
+          "description": "Number of units added (1 to 500)."
+        },
+        "unitCost": {
+          "type": "number",
+          "description": "Purchase cost per unit."
+        },
+        "totalCost": {
+          "type": "number",
+          "description": "Total purchase cost."
+        },
+        "supplier": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Supplier or store name."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 160,
+          "description": "Optional restock note."
+        },
+        "recordedByUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the admin who recorded the restock."
+        },
+        "recordedByName": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Display name of the admin."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        }
+      },
+      "required": [
+        "productId",
+        "productName",
+        "variant",
+        "quantityAdded",
+        "unitCost",
+        "totalCost",
+        "supplier",
+        "note",
+        "recordedByUid",
+        "recordedByName",
+        "createdAt"
+      ]
+    },
+    "FridgeSettings": {
+      "title": "FridgeSettings",
+      "description": "Configuration settings for the office refrigerator.",
+      "type": "object",
+      "properties": {
+        "officeName": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Name of the office or area."
+        },
+        "currencySymbol": {
+          "type": "string",
+          "maxLength": 8,
+          "description": "Currency symbol displayed in prices and totals."
+        },
+        "allowSelfService": {
+          "type": "boolean",
+          "description": "Whether signed-in office members can register their own purchases."
+        },
+        "adminName": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Display name of the refrigerator administrator / seller."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of update."
+        }
+      },
+      "required": [
+        "officeName",
+        "currencySymbol",
+        "allowSelfService",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted admin role assignment record.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Beverage inventory catalog supporting custom products and volumes (e.g. 355 ml, 200 ml)."
+    },
+    "/sales/{saleId}": {
+      "schema": { "$ref": "#/entities/Sale" },
+      "description": "Sales ledger recording every beverage purchase and credit settlement."
+    },
+    "/restocks/{restockId}": {
+      "schema": { "$ref": "#/entities/Restock" },
+      "description": "Inventory replenishment audit log managed by administrators."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/FridgeSettings" },
+      "description": "Office refrigerator configuration document ('fridge')."
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator directory."
+    }
+  }
+}
